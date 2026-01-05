@@ -4,43 +4,70 @@ import os
 from datetime import datetime
 import pytz
 
-# 页面配置
 st.set_page_config(page_title="鑫圆小助手", layout="wide")
-
-# 时区设置
 TIMEZONE = pytz.timezone('Africa/Conakry')
-now_gn = datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
+today = datetime.now(TIMEZONE).date()
 
-# 主标题
 st.title("🤖 鑫圆小助手 - 综合管理控制台")
-st.write(f"🌍 几内亚当前时间：`{now_gn}`")
+st.write(f"🌍 几内亚当前时间：`{datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}`")
 st.divider()
 
-# --- 证件汇总区域 ---
-st.header("📊 证件到期汇总状态")
+def get_counts(file_path, date_cols):
+    """计算 Excel 中的预警统计"""
+    if not os.path.exists(file_path):
+        return None
+    try:
+        df = pd.read_excel(file_path)
+        total = len(df)
+        red, yellow, green = 0, 0, 0
+        
+        for _, row in df.iterrows():
+            min_days = 9999
+            has_date = False
+            for col in date_cols:
+                if col in df.columns and pd.notna(row[col]):
+                    has_date = True
+                    expiry = pd.to_datetime(row[col]).date()
+                    days = (expiry - today).days
+                    if days < min_days: min_days = days
+            
+            if not has_date: continue
+            if min_days < 0: red += 1
+            elif min_days <= 30: yellow += 1
+            else: green += 1
+        return {"total": total, "red": red, "yellow": yellow, "green": green}
+    except:
+        return None
 
-col1, col2 = st.columns(2)
+# --- 数据展示 ---
+c1, c2 = st.columns(2)
 
-with col1:
-    st.subheader("1️⃣ 设备证件状态")
-    if os.path.exists("设备证件清单.xlsx"):
-        df_car = pd.read_excel("设备证件清单.xlsx")
-        # 这里可以加入具体的过期逻辑计算，目前先显示总数
-        st.metric("在册设备总数", f"{len(df_car)} 台")
-        st.success("✅ 数据已连接")
+# 1. 设备证件汇总
+with c1:
+    st.markdown("### 🚜 设备证件汇总")
+    stats = get_counts("设备证件清单.xlsx", ["灰卡有效期", "保险有效期", "车检有效期"])
+    if stats:
+        st.metric("在册总数", f"{stats['total']} 台")
+        m1, m2, m3 = st.columns(3)
+        m1.error(f"🔴 已过期: {stats['red']}")
+        m2.warning(f"🟡 临期: {stats['yellow']}")
+        m3.success(f"🟢 正常: {stats['green']}")
     else:
-        st.info("💡 尚未检测到设备数据，请在侧边栏录入。")
-    st.caption("管理入口：左侧菜单 -> 车辆证件管理")
+        st.info("暂无车辆数据")
 
-with col2:
-    st.subheader("2️⃣ 人员证件状态")
-    if os.path.exists("人员证件清单.xlsx"):
-        df_per = pd.read_excel("人员证件清单.xlsx")
-        st.metric("在职人员总数", f"{len(df_per)} 人")
-        st.success("✅ 数据已连接")
+# 2. 人员证件汇总
+with c2:
+    st.markdown("### 👤 人员证件汇总")
+    # 假设人员表格包含这些有效期列
+    stats = get_counts("人员证件清单.xlsx", ["护照有效期", "签证有效期", "居住证有效期"])
+    if stats:
+        st.metric("在职总数", f"{stats['total']} 人")
+        m1, m2, m3 = st.columns(3)
+        m1.error(f"🔴 已过期: {stats['red']}")
+        m2.warning(f"🟡 临期: {stats['yellow']}")
+        m3.success(f"🟢 正常: {stats['green']}")
     else:
-        st.info("💡 尚未检测到人员数据，请在侧边栏录入。")
-    st.caption("管理入口：左侧菜单 -> 人员证件管理")
+        st.info("暂称人员数据")
 
 st.divider()
-st.info("📢 **使用提示**：点击左上角的“>”箭头可以展开菜单，进行具体的数字转换或证件数据录入。")
+st.caption("💡 统计逻辑：红色(<0天)，黄色(≤30天)，绿色(>30天)。具体录入请使用左侧菜单。")
