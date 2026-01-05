@@ -4,146 +4,130 @@ import os
 from datetime import datetime
 import pytz
 
-# --- 1. 页面配置 ---
+# --- 1. 页面基本配置 ---
 st.set_page_config(page_title="小工具", layout="wide")
 
-# --- 2. 侧边栏统一修正 ---
+# --- 2. 侧边栏布局优化 ---
 with st.sidebar:
     st.page_link("app.py", label="主页面")
-    st.divider()
+    st.write("") 
 
-st.markdown("""<style>[data-testid="stSidebarNav"] ul li:first-child { display: none !important; }</style>""", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+        [data-testid="stSidebarNav"] ul li:first-child { display: none !important; }
+        [data-testid="stSidebarNav"] { padding-top: 0rem; }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- 3. 核心统计与分析逻辑 ---
-def show_person_detailed_dashboard():
-    TIMEZONE = pytz.timezone('Africa/Conakry')
-    today = datetime.now(TIMEZONE).date()
-    r_limit, y_limit = 0, 30 
-    FILE_NAME = "人员证件清单.xlsx"
-    
-    if os.path.exists(FILE_NAME):
-        try:
-            df = pd.read_excel(FILE_NAME)
-            red, yellow, green = 0, 0, 0
+# --- 3. 预警时间设置 ---
+st.sidebar.header("预警时间设置")
+red_days = st.sidebar.number_input("🔴 红色预警天数", value=0)
+yellow_days = st.sidebar.number_input("🟡 黄色预警天数", value=30)
+
+# --- 4. 修正后的统计逻辑函数 ---
+TIMEZONE = pytz.timezone('Africa/Conakry')
+today = datetime.now(TIMEZONE).date()
+
+def get_refined_stats(file_path, monitor_map, r_limit, y_limit):
+    if not os.path.exists(file_path):
+        return None
+    try:
+        df = pd.read_excel(file_path)
+        total_count = len(df)
+        red_entities, yellow_entities, green_entities = 0, 0, 0
+        detail_item_counts = {k: 0 for k in monitor_map.keys()}
+        
+        for _, row in df.iterrows():
+            entity_status = "green" # 默认正常
+            has_red = False
+            has_yellow = False
             
-            # 定义需要监控的六个有效期类别
-            monitor_map = {
-                "护照": "护照有效期",
-                "身份证": "身份证有效期",
-                "签证": "几内亚签证有效期",
-                "工作证": "工作证有效期",
-                "居住证": "居住证有效期",
-                "驾照": "驾照有效期"
-            }
-            detail_stats = {k: 0 for k in monitor_map.keys()}
-            
-            for _, row in df.iterrows():
-                row_days = []
-                for label, col in monitor_map.items():
-                    if col in df.columns and pd.notna(row[col]):
+            for label, col in monitor_map.items():
+                if col in df.columns and pd.notna(row[col]):
+                    try:
                         d = (pd.to_datetime(row[col]).date() - today).days
-                        row_days.append(d)
-                        # 如果该单项证件进入预警期（<=30天），统计到分类数据中
-                        if d <= y_limit: 
-                            detail_stats[label] += 1
-                
-                # 判断该人员整体所属的状态颜色
-                if not row_days:
-                    green += 1
-                else:
-                    min_d = min(row_days)
-                    if min_d < r_limit: red += 1
-                    elif min_d <= y_limit: yellow += 1
-                    else: green += 1
+                        if d < r_limit:
+                            detail_item_counts[label] += 1
+                            has_red = True
+                        elif d <= y_limit:
+                            detail_item_counts[label] += 1
+                            has_yellow = True
+                    except:
+                        continue
             
-            # 顶部汇总展示
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("在职总人数", f"{len(df)} 人")
-            c2.error(f"🔴 已过期: {red}")
-            c3.warning(f"🟡 临期: {yellow}")
-            c4.success(f"🟢 正常: {green}")
-            
-            # 异常证件类别分布
-            if red + yellow > 0:
-                st.write("📊 **具体证件预警分布（涵盖所有异常项）：**")
-                # 分两行显示，每行3个类别
-                m_cols1 = st.columns(3)
-                m_cols1[0].write(f"护照预警: {detail_stats['护照']} 人")
-                m_cols1[1].write(f"身份证预警: {detail_stats['身份证']} 人")
-                m_cols1[2].write(f"签证预警: {detail_stats['签证']} 人")
-                
-                m_cols2 = st.columns(3)
-                m_cols2[0].write(f"工作证预警: {detail_stats['工作证']} 人")
-                m_cols2[1].write(f"居住证预警: {detail_stats['居住证']} 人")
-                m_cols2[2].write(f"驾照预警: {detail_stats['驾照']} 人")
-            st.divider()
-            return df
-        except: return None
-    return None
-
-st.title("人员证件管理")
-df_person = show_person_detailed_dashboard()
-
-# --- 4. 管理功能 ---
-FILE_NAME = "人员证件清单.xlsx"
-menu = st.tabs(["查看/编辑清单", "单条录入", "批量导入Excel"])
-
-with menu[0]:
-    if df_person is not None:
-        st.dataframe(df_person, use_container_width=True)
-    else: st.info("暂无人员数据，请先录入。")
-
-with menu[1]:
-    with st.form("add_person_form", clear_on_submit=True):
-        st.write("**基本信息**")
-        c1, c2, c3 = st.columns(3)
-        name = c1.text_input("姓名")
-        gender = c2.selectbox("性别", ["男", "女"])
-        id_no = c3.text_input("身份证号")
-        
-        st.write("---")
-        st.write("**核心证件**")
-        c4, c5, c6 = st.columns(3)
-        pass_no = c4.text_input("护照号")
-        visa_no = c5.text_input("几内亚签证号")
-        res_no = c6.text_input("居住证号")
-        
-        st.write("**其他证件**")
-        c7, c8 = st.columns(2)
-        work_no = c7.text_input("工作证号")
-        lic_no = c8.text_input("驾照号")
-        
-        st.write("---")
-        st.write("**有效期设置**")
-        d1, d2, d3 = st.columns(3)
-        date_p = d1.date_input("护照有效期")
-        date_i = d2.date_input("身份证有效期")
-        date_v = d3.date_input("几内亚签证有效期")
-        
-        d4, d5, d6 = st.columns(3)
-        date_w = d4.date_input("工作证有效期")
-        date_r = d5.date_input("居住证有效期")
-        date_l = d6.date_input("驾照有效期")
-        
-        if st.form_submit_button("确认保存"):
-            new_person = {
-                "姓名": name, "性别": gender, "身份证号": id_no, "护照号": pass_no,
-                "几内亚签证号": visa_no, "居住证号": res_no, "工作证号": work_no, "驾照号": lic_no,
-                "护照有效期": date_p.strftime("%Y-%m-%d"), "身份证有效期": date_i.strftime("%Y-%m-%d"),
-                "几内亚签证有效期": date_v.strftime("%Y-%m-%d"), "工作证有效期": date_w.strftime("%Y-%m-%d"),
-                "居住证有效期": date_r.strftime("%Y-%m-%d"), "驾照有效期": date_l.strftime("%Y-%m-%d")
-            }
-            if os.path.exists(FILE_NAME):
-                df = pd.concat([pd.read_excel(FILE_NAME), pd.DataFrame([new_person])], ignore_index=True)
+            # 确定该个体（人或车）的最终状态标签
+            if has_red:
+                red_entities += 1
+            elif has_yellow:
+                yellow_entities += 1
             else:
-                df = pd.DataFrame([new_person])
-            df.to_excel(FILE_NAME, index=False)
-            st.success(f"✅ {name} 的信息已成功保存！")
-            st.rerun()
+                green_entities += 1
+                
+        return {
+            "total": total_count, 
+            "red": red_entities, 
+            "yellow": yellow_entities, 
+            "green": green_entities, 
+            "details": detail_item_counts
+        }
+    except:
+        return None
 
-with menu[2]:
-    upl = st.file_uploader("上传人员Excel文件", type="xlsx")
-    if upl and st.button("确认导入数据"):
-        pd.read_excel(upl).to_excel(FILE_NAME, index=False)
-        st.success("人员清单导入成功！")
-        st.rerun()
+# --- 5. 主界面展示 ---
+st.title("控制台汇总")
+st.write(f"几内亚时间: {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
+st.divider()
+
+col1, col2 = st.columns(2)
+
+# --- 设备证件模块 ---
+with col1:
+    st.subheader("设备证件监控")
+    car_map = {
+        "灰卡": "灰卡有效日期", "无抵押": "无抵押证明有效日期", 
+        "保险": "保险有效期", "车检": "车检有效期", "有色车窗": "有色车窗证有效期"
+    }
+    res_car = get_refined_stats("设备证件清单.xlsx", car_map, red_days, yellow_days)
+    
+    if res_car:
+        # 顶部：以“台”为单位的汇总
+        st.metric("在册设备总数", f"{res_car['total']} 台")
+        m1, m2, m3 = st.columns(3)
+        m1.error(f"🔴 已过期: {res_car['red']}")
+        m2.warning(f"🟡 临期: {res_car['yellow']}")
+        m3.success(f"🟢 正常: {res_car['green']}")
+        
+        # 底部：异常项分析
+        anomaly_count = res_car['red'] + res_car['yellow']
+        with st.expander(f"📋 异常设备总计: {anomaly_count} 台 (点击查看具体分类)", expanded=True):
+            for label, count in res_car['details'].items():
+                if count > 0:
+                    st.write(f"⚠️ {label}类别共涉及: {count} 件异常")
+    else:
+        st.info("暂无设备数据")
+
+# --- 人员证件模块 ---
+with col2:
+    st.subheader("人员证件监控")
+    per_map = {
+        "护照": "护照有效期", "身份证": "身份证有效期", "签证": "几内亚签证有效期",
+        "工作证": "工作证有效期", "居住证": "居住证有效期", "驾照": "驾照有效期"
+    }
+    res_per = get_refined_stats("人员证件清单.xlsx", per_map, red_days, yellow_days)
+    
+    if res_per:
+        # 顶部：以“人”为单位的汇总
+        st.metric("在职总人数", f"{res_per['total']} 人")
+        n1, n2, n3 = st.columns(3)
+        n1.error(f"🔴 已过期: {res_per['red']}")
+        n2.warning(f"🟡 临期: {res_per['yellow']}")
+        n3.success(f"🟢 正常: {res_per['green']}")
+        
+        # 底部：异常项分析
+        anomaly_per_count = res_per['red'] + res_per['yellow']
+        with st.expander(f"📋 异常人员总计: {anomaly_per_count} 人 (点击查看具体分类)", expanded=True):
+            for label, count in res_per['details'].items():
+                if count > 0:
+                    st.write(f"⚠️ {label}类别共涉及: {count} 人预警")
+    else:
+        st.info("暂无人员数据")
