@@ -5,29 +5,23 @@ from datetime import datetime
 import pytz
 
 # --- 1. 页面基本配置 ---
-st.set_page_config(page_title="鑫圆办公系统", layout="wide")
+st.set_page_config(page_title="小工具", layout="wide")
 
-# --- 2. 核心修正：强制让侧边栏显示“首页”且不消失 ---
+# --- 2. 侧边栏导航：手动插入纯文字“主页面”链接并隐藏系统默认项目 ---
+with st.sidebar:
+    st.page_link("app.py", label="主页面")
+    st.divider()
+
 st.markdown("""
     <style>
-        /* 强制修改侧边栏第一个选项的文字 */
-        [data-testid="stSidebarNav"] ul li:first-child span {
-            font-size: 0 !important;
-        }
-        [data-testid="stSidebarNav"] ul li:first-child span::after {
-            content: "首页";
-            font-size: 1rem !important;
-            visibility: visible !important;
-            display: block;
-        }
-        /* 确保鼠标悬停和选中时依然显示 */
-        [data-testid="stSidebarNav"] ul li:first-child a {
-            background-color: rgba(151, 166, 195, 0.1);
+        /* 隐藏侧边栏原生第一个项目(app) */
+        [data-testid="stSidebarNav"] ul li:first-child {
+            display: none !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 侧边栏：预警时间调整模块 ---
+# --- 3. 预警时间设置模块 ---
 st.sidebar.header("预警时间设置")
 red_days = st.sidebar.number_input("🔴 红色预警天数", value=0)
 yellow_days = st.sidebar.number_input("🟡 黄色预警天数", value=30)
