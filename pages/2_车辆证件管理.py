@@ -7,7 +7,20 @@ import pytz
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="小工具", layout="wide")
 
-# --- 2. 顶部汇总模块 (保留红黄绿图标) ---
+# --- 2. 侧边栏统一修正 ---
+with st.sidebar:
+    st.page_link("app.py", label="主页面")
+    st.divider()
+
+st.markdown("""
+    <style>
+        [data-testid="stSidebarNav"] ul li:first-child {
+            display: none !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 3. 顶部汇总模块 ---
 def show_top_dashboard():
     TIMEZONE = pytz.timezone('Africa/Conakry')
     today = datetime.now(TIMEZONE).date()
@@ -39,7 +52,7 @@ def show_top_dashboard():
 st.title("车辆证件管理")
 show_top_dashboard()
 
-# --- 3. 业务功能 ---
+# --- 4. 录入功能 ---
 FILE_NAME = "设备证件清单.xlsx"
 menu = st.tabs(["查看/编辑清单", "单条录入", "批量导入Excel"])
 
@@ -61,10 +74,7 @@ with menu[1]:
         if st.form_submit_button("保存"):
             new_data = {"车牌号": plate, "责任人": owner, "灰卡有效期": date1.strftime("%Y-%m-%d"), 
                         "保险有效期": date2.strftime("%Y-%m-%d"), "车检有效期": date3.strftime("%Y-%m-%d")}
-            if os.path.exists(FILE_NAME):
-                df = pd.concat([pd.read_excel(FILE_NAME), pd.DataFrame([new_data])])
-            else:
-                df = pd.DataFrame([new_data])
+            df = pd.concat([pd.read_excel(FILE_NAME), pd.DataFrame([new_data])]) if os.path.exists(FILE_NAME) else pd.DataFrame([new_data])
             df.to_excel(FILE_NAME, index=False)
             st.success("录入成功！")
             st.rerun()

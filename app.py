@@ -7,7 +7,7 @@ import pytz
 # --- 1. 页面基本配置 ---
 st.set_page_config(page_title="小工具", layout="wide")
 
-# --- 2. 侧边栏导航：手动插入纯文字“主页面”链接并隐藏系统默认项目 ---
+# --- 2. 侧边栏统一修正 (必须每个页面都加这段) ---
 with st.sidebar:
     st.page_link("app.py", label="主页面")
     st.divider()
